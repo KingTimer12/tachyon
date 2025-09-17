@@ -3015,9 +3015,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tachyon@workspace:.":
+"tachyon-rs@workspace:.":
   version: 0.0.0-use.local
-  resolution: "tachyon@workspace:."
+  resolution: "tachyon-rs@workspace:."
   dependencies:
     "@emnapi/core": "npm:^1.5.0"
     "@emnapi/runtime": "npm:^1.5.0"
