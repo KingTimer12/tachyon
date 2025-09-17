@@ -4,15 +4,30 @@ use http_body_util::combinators::BoxBody;
 use hyper::{server::conn::http1, service::service_fn, Request, Response};
 use hyper_util::rt::TokioIo;
 use napi_derive::napi;
+use std::{
+  net::{IpAddr, Ipv4Addr, SocketAddr},
+  sync::Arc,
+};
 use tokio::{net::TcpListener, task};
-use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::Arc};
 
-use crate::{core::router::{TachyonRouter, TachyonThreadsafeFunction}, utils::full};
+use crate::{
+  core::router::{TachyonRouter, TachyonThreadsafeFunction},
+  utils::full,
+};
 
 #[napi]
 pub struct Tachyon {
   routes: Arc<DashMap<String, TachyonRouter>>,
 }
+
+impl Default for Tachyon {
+  fn default() -> Self {
+    Self {
+      routes: Arc::new(DashMap::new()),
+    }
+  }
+}
+
 #[napi]
 impl Tachyon {
   #[napi(constructor)]
@@ -26,10 +41,9 @@ impl Tachyon {
     ts_args_type = "route: string, handler: (request: TachyonRequest, response: TachyonResponse) => void"
   )]
   pub fn get(&self, route: String, handler: TachyonThreadsafeFunction) {
-    self.routes.insert(
-      route.to_string(),
-      TachyonRouter::new("GET", handler),
-    );
+    self
+      .routes
+      .insert(route.to_string(), TachyonRouter::new("GET", handler));
   }
 
   #[napi]
@@ -45,13 +59,11 @@ impl Tachyon {
   pub async fn listen(&self, port: u16) -> napi::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
     // Implement server listening logic here
-    let listener = TcpListener::bind(addr)
-      .await
-      .map_err(|e| napi::Error::from(e))?;
+    let listener = TcpListener::bind(addr).await.map_err(napi::Error::from)?;
     println!("Listening on http://{}", addr);
 
     loop {
-      let (stream, _) = listener.accept().await.map_err(|e| napi::Error::from(e))?;
+      let (stream, _) = listener.accept().await.map_err(napi::Error::from)?;
       let io = TokioIo::new(stream);
       let routes = Arc::clone(&self.routes);
       task::spawn(async move {
@@ -78,9 +90,7 @@ impl Tachyon {
     let routes_clone = Arc::clone(&routes);
     for route in routes_clone.iter() {
       if route.key().eq(req.uri().path()) && route.value().method().eq(req.method().as_str()) {
-        return Ok(Response::new(full(
-          "Hello, world!",
-        )));
+        return Ok(Response::new(full("Hello, world!")));
       }
     }
     Ok(Response::new(full("Not Found")))

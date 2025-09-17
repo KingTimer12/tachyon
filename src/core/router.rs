@@ -18,7 +18,10 @@ pub struct TachyonRouter {
 
 impl TachyonRouter {
   pub fn new(method: &str, handler: TachyonThreadsafeFunction) -> Self {
-    Self { method: method.to_string(), handler }
+    Self {
+      method: method.to_string(),
+      handler,
+    }
   }
 
   pub fn method(&self) -> &str {
