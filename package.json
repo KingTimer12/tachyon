@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/napi-rs/package-template.git"
+    "url": "git@github.com:KingTimer12/tachyon.git"
   },
   "main": "index.js",
   "devDependencies": {
@@ -38,7 +38,7 @@
     ]
   },
   "browser": "browser.js",
-  "description": "Template project for writing node package with napi-rs",
+  "description": "🧪 \"A tachyon is a hypothetical particle that always travels faster than light\" | As stated in the sentence, the objective of this server framework is to speed up the response time of requests with minimal impact on performance. ",
   "engines": {
     "node": ">= 12.22.0 < 13 || >= 14.17.0 < 15 || >= 15.12.0 < 16 || >= 16.0.0"
   },
@@ -103,7 +103,7 @@
     "format:rs": "cargo fmt",
     "lint": "oxlint .",
     "prepublishOnly": "napi prepublish -t npm",
-    "test": "napi build --platform --release && ava",
+    "test": "ava",
     "preversion": "napi build --platform && git add .",
     "version": "napi version",
     "prepare": "husky"

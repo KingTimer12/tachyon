@@ -196,9 +196,9 @@ jobs:
           " >> $GITHUB_OUTPUT
           node -e "
             if ('${{ matrix.target }}'.endsWith('-musl')) {
-              console.log('IMAGE=node:alpine')
+              console.log('IMAGE=oven/bun:alpine')
             } else {
-              console.log('IMAGE=node:slim')
+              console.log('IMAGE=oven/bun:slim')
             }
           " >> $GITHUB_OUTPUT
       - name: Install dependencies
@@ -223,7 +223,7 @@ jobs:
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
-          run: npm test
+          run: bun run test
   publish:
     name: Publish
     runs-on: ubuntu-latest
