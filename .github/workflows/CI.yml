@@ -185,10 +185,7 @@ jobs:
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             architecture: x64
-          - host: windows-latest
-            target: i686-pc-windows-msvc
-            architecture: x86
-          - host: windows-latest
+          - host: windows-11-arm
             target: aarch64-pc-windows-msvc
             architecture: arm64
           - host: macos-latest
