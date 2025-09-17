@@ -26,20 +26,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
+
+      - name: Setup node
+        uses: actions/setup-node@v5
         with:
-          bun-version: latest
+          node-version: 22
+          cache: 'yarn'
+
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+
       - name: Install dependencies
-        run: bun install
+        run: yarn install
+
       - name: Oxlint
-        run: bun lint
+        run: yarn lint
+
       - name: Cargo fmt
         run: cargo fmt -- --check
+
       - name: Clippy
         run: cargo clippy
   build:
@@ -49,33 +56,52 @@ jobs:
         settings:
           - host: macos-latest
             target: x86_64-apple-darwin
-            build: bun run build --target x86_64-apple-darwin
+            build: yarn build --target x86_64-apple-darwin
           - host: windows-latest
-            build: bun run build --target x86_64-pc-windows-msvc
+            build: yarn build --target x86_64-pc-windows-msvc
             target: x86_64-pc-windows-msvc
           - host: windows-latest
-            build: bun run build --target i686-pc-windows-msvc
+            build: yarn build --target i686-pc-windows-msvc
             target: i686-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: bun run build --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: yarn build --target x86_64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            build: bun run build --target x86_64-unknown-linux-musl -x
+            build: yarn build --target x86_64-unknown-linux-musl -x
           - host: macos-latest
             target: aarch64-apple-darwin
-            build: bun run build --target aarch64-apple-darwin
+            build: yarn build --target aarch64-apple-darwin
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: yarn build --target aarch64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            build: yarn build --target armv7-unknown-linux-gnueabihf --use-napi-cross
+          - host: ubuntu-latest
+            target: aarch64-linux-android
+            build: yarn build --target aarch64-linux-android
+          - host: ubuntu-latest
+            target: armv7-linux-androideabi
+            build: yarn build --target armv7-linux-androideabi
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: yarn build --target aarch64-unknown-linux-musl -x
           - host: windows-latest
             target: aarch64-pc-windows-msvc
-            build: bun run build --target aarch64-pc-windows-msvc
+            build: yarn build --target aarch64-pc-windows-msvc
+          - host: ubuntu-latest
+            target: wasm32-wasip1-threads
+            build: yarn build --target wasm32-wasip1-threads
     name: stable - ${{ matrix.settings.target }} - node@22
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v5
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup node
+        uses: actions/setup-node@v5
         with:
-          bun-version: latest
+          node-version: 22
+          cache: yarn
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -108,7 +134,7 @@ jobs:
         if: ${{ matrix.settings.setup }}
         shell: bash
       - name: Install dependencies
-        run: bun install
+        run: yarn install
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -119,6 +145,52 @@ jobs:
           path: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
+          if-no-files-found: error
+  build-freebsd:
+    runs-on: ubuntu-latest
+    name: Build FreeBSD
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        id: build
+        uses: cross-platform-actions/action@v0.29.0
+        env:
+          DEBUG: napi:*
+          RUSTUP_IO_THREADS: 1
+        with:
+          operating_system: freebsd
+          version: '14.2'
+          memory: 8G
+          cpu_count: 3
+          environment_variables: 'DEBUG RUSTUP_IO_THREADS'
+          shell: bash
+          run: |
+            sudo pkg install -y -f curl node libnghttp2 npm cmake
+            sudo npm install -g yarn --ignore-scripts
+            curl https://sh.rustup.rs -sSf --output rustup.sh
+            sh rustup.sh -y --profile minimal --default-toolchain stable
+            source "$HOME/.cargo/env"
+            echo "~~~~ rustc --version ~~~~"
+            rustc --version
+            echo "~~~~ node -v ~~~~"
+            node -v
+            echo "~~~~ yarn --version ~~~~"
+            yarn --version
+            pwd
+            ls -lah
+            whoami
+            env
+            freebsd-version
+            yarn install
+            yarn build
+            rm -rf node_modules
+            rm -rf target
+            rm -rf .yarn/cache
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-freebsd
+          path: ${{ env.APP_NAME }}.*.node
           if-no-files-found: error
   test-macOS-windows-binding:
     name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
@@ -146,12 +218,14 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v5
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup node
+        uses: actions/setup-node@v5
         with:
-          bun-version: latest
+          node-version: ${{ matrix.node }}
+          cache: yarn
+          architecture: ${{ matrix.settings.architecture }}
       - name: Install dependencies
-        run: bun install
+        run: yarn install
       - name: Download artifacts
         uses: actions/download-artifact@v5
         with:
@@ -161,7 +235,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: bun run test
+        run: yarn test
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
@@ -172,16 +246,20 @@ jobs:
         target:
           - x86_64-unknown-linux-gnu
           - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-musl
+          - armv7-unknown-linux-gnueabihf
         node:
           - '20'
           - '22'
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v5
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup node
+        uses: actions/setup-node@v5
         with:
-          bun-version: latest
+          node-version: ${{ matrix.node }}
+          cache: yarn
       - name: Output docker params
         id: docker
         run: |
@@ -196,13 +274,16 @@ jobs:
           " >> $GITHUB_OUTPUT
           node -e "
             if ('${{ matrix.target }}'.endsWith('-musl')) {
-              console.log('IMAGE=oven/bun:alpine')
+              console.log('IMAGE=node:${{ matrix.node }}-alpine')
             } else {
-              console.log('IMAGE=oven/bun:slim')
+              console.log('IMAGE=node:${{ matrix.node }}-slim')
             }
           " >> $GITHUB_OUTPUT
       - name: Install dependencies
-        run: bun install
+        run: |
+          yarn config set --json supportedArchitectures.cpu '["current", "arm64", "x64", "arm"]'
+          yarn config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
+          yarn install
       - name: Download artifacts
         uses: actions/download-artifact@v5
         with:
@@ -222,8 +303,36 @@ jobs:
         uses: addnab/docker-run-action@v3
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
-          options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
-          run: bun run test
+          options: -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}
+          run: yarn test
+  test-wasi:
+    name: Test WASI target
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: yarn
+      - name: Install dependencies
+        run: |
+          yarn config set supportedArchitectures.cpu "wasm32"
+          yarn install
+      - name: Download artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: bindings-wasm32-wasip1-threads
+          path: .
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      - name: Test bindings
+        run: yarn test
+        env:
+          NAPI_RS_FORCE_WASI: 1
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -232,24 +341,27 @@ jobs:
       id-token: write
     needs:
       - lint
+      - build-freebsd
       - test-macOS-windows-binding
       - test-linux-binding
+      - test-wasi
     steps:
       - uses: actions/checkout@v5
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup node
+        uses: actions/setup-node@v5
         with:
-          bun-version: latest
+          node-version: 22
+          cache: yarn
       - name: Install dependencies
-        run: bun install
+        run: yarn install
       - name: create npm dirs
-        run: bun napi create-npm-dirs
+        run: yarn napi create-npm-dirs
       - name: Download all artifacts
         uses: actions/download-artifact@v5
         with:
           path: artifacts
       - name: Move artifacts
-        run: bun artifacts
+        run: yarn artifacts
       - name: List packages
         run: ls -R ./npm
         shell: bash
