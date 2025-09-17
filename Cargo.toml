@@ -1,8 +1,8 @@
 
 [package]
-authors = ["LongYinan <lynweklm@gmail.com>"]
+authors = ["AaronKing <aaron.cmfor@gmail.com>"]
 edition = "2021"
-name = "tachyon"
+name = "tachyon-rs"
 version = "0.1.0"
 
 [lib]
