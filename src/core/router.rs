@@ -1,14 +1,8 @@
-use napi::threadsafe_function::ThreadsafeFunction;
-use napi_derive::napi;
+use napi::{bindgen_prelude::FnArgs, threadsafe_function::ThreadsafeFunction};
 
-pub type TachyonThreadsafeFunction = ThreadsafeFunction<(TachyonRequest, TachyonResponse)>;
+use crate::core::{request::TachyonRequest, response::ResponseHandle};
 
-#[napi]
-#[derive(Debug, Clone, Copy)]
-pub struct TachyonRequest;
-
-#[napi]
-pub struct TachyonResponse;
+pub type TachyonThreadsafeFunction = ThreadsafeFunction<FnArgs<(TachyonRequest, ResponseHandle)>>;
 
 pub struct TachyonRouter {
   method: String,
@@ -26,5 +20,9 @@ impl TachyonRouter {
 
   pub fn method(&self) -> &str {
     &self.method
+  }
+
+  pub fn handler(&self) -> &TachyonThreadsafeFunction {
+    &self.handler
   }
 }

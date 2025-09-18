@@ -3,15 +3,24 @@ use dashmap::DashMap;
 use http_body_util::combinators::BoxBody;
 use hyper::{server::conn::http1, service::service_fn, Request, Response};
 use hyper_util::rt::TokioIo;
+use napi::{
+  bindgen_prelude::{FnArgs, Function},
+  threadsafe_function::ThreadsafeFunctionCallMode,
+  Result,
+};
 use napi_derive::napi;
 use std::{
   net::{IpAddr, Ipv4Addr, SocketAddr},
-  sync::Arc,
+  sync::{Arc, Mutex},
 };
 use tokio::{net::TcpListener, task};
 
 use crate::{
-  core::router::{TachyonRouter, TachyonThreadsafeFunction},
+  core::{
+    request::TachyonRequest,
+    response::{ResponseHandle, TachyonResponse, RESPONSES},
+    router::TachyonRouter,
+  },
   utils::full,
 };
 
@@ -37,13 +46,21 @@ impl Tachyon {
     }
   }
 
-  #[napi(
-    ts_args_type = "route: string, handler: (request: TachyonRequest, response: TachyonResponse) => void"
-  )]
-  pub fn get(&self, route: String, handler: TachyonThreadsafeFunction) {
+  #[napi]
+  pub fn get(
+    &self,
+    route: String,
+    callback: Function<'static, FnArgs<(TachyonRequest, ResponseHandle)>>,
+  ) -> Result<()> {
+    let handler = callback
+      .build_threadsafe_function()
+      .callee_handled::<true>()
+      .weak::<false>()
+      .build()?;
     self
       .routes
       .insert(route.to_string(), TachyonRouter::new("GET", handler));
+    Ok(())
   }
 
   #[napi]
@@ -86,11 +103,30 @@ impl Tachyon {
   async fn echo(
     routes: Arc<DashMap<String, TachyonRouter>>,
     req: Request<hyper::body::Incoming>,
-  ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
+  ) -> std::result::Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     let routes_clone = Arc::clone(&routes);
     for route in routes_clone.iter() {
       if route.key().eq(req.uri().path()) && route.value().method().eq(req.method().as_str()) {
-        return Ok(Response::new(full("Hello, world!")));
+        let response = Arc::new(Mutex::new(TachyonResponse::new()));
+        let request = TachyonRequest::new();
+
+        let id: u32 = 1;
+
+        RESPONSES.insert(id, Arc::clone(&response));
+        let handle = ResponseHandle::new(id);
+
+        let tsfn = Arc::new(route.value().handler());
+        tsfn.call(
+          Ok(napi::bindgen_prelude::FnArgs {
+            data: (request, handle),
+          }),
+          ThreadsafeFunctionCallMode::Blocking,
+        );
+        let resp = response.lock().unwrap();
+        if let Some(res) = resp.data() {
+          return Ok(Response::new(full(res.to_string())));
+        }
+        return Ok(Response::new(full("")));
       }
     }
     Ok(Response::new(full("Not Found")))
