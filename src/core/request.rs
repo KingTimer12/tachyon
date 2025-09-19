@@ -11,3 +11,15 @@ impl TachyonRequest {
     Self
   }
 }
+
+impl Default for TachyonRequest {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl TachyonRequest {
+  pub fn method(&self) -> &str {
+    "GET"
+  }
+}

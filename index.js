@@ -557,7 +557,6 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.ResponseHandle = nativeBinding.ResponseHandle
 module.exports.Tachyon = nativeBinding.Tachyon
 module.exports.TachyonRequest = nativeBinding.TachyonRequest
 module.exports.TachyonResponse = nativeBinding.TachyonResponse

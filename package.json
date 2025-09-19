@@ -106,6 +106,7 @@
     "test": "ava",
     "preversion": "napi build --platform && git add .",
     "version": "napi version",
-    "prepare": "husky"
+    "prepare": "husky",
+    "example": "napi build --platform --release && bun run example/main.ts"
   }
 }

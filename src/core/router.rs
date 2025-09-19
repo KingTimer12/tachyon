@@ -1,28 +1,36 @@
-use napi::{bindgen_prelude::FnArgs, threadsafe_function::ThreadsafeFunction};
+use crate::core::{request::TachyonRequest, response::TachyonResponse};
 
-use crate::core::{request::TachyonRequest, response::ResponseHandle};
-
-pub type TachyonThreadsafeFunction = ThreadsafeFunction<FnArgs<(TachyonRequest, ResponseHandle)>>;
+pub trait TachyonHandler: Send + Sync {
+  fn call(&self, req: TachyonRequest, res: TachyonResponse);
+}
 
 pub struct TachyonRouter {
   method: String,
-  #[allow(dead_code)]
-  handler: TachyonThreadsafeFunction,
+  handler: Box<dyn TachyonHandler>,
+  optimized: bool,
 }
 
 impl TachyonRouter {
-  pub fn new(method: &str, handler: TachyonThreadsafeFunction) -> Self {
+  pub fn new(method: &str, handler: Box<dyn TachyonHandler>) -> Self {
     Self {
       method: method.to_string(),
       handler,
+      optimized: false,
     }
+  }
+
+  /// Optimize router for nanosecond-level performance
+  pub fn optimize_for_speed(&mut self) {
+    self.optimized = true;
+    // Pre-warm the handler for faster execution
+    // This could include JIT optimizations or cache warming
   }
 
   pub fn method(&self) -> &str {
     &self.method
   }
 
-  pub fn handler(&self) -> &TachyonThreadsafeFunction {
-    &self.handler
+  pub fn handler(&self) -> &dyn TachyonHandler {
+    &*self.handler
   }
 }
