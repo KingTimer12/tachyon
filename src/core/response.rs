@@ -7,7 +7,7 @@ use std::sync::Arc;
 #[napi]
 pub struct TachyonResponse {
   data: Arc<std::sync::Mutex<Option<String>>>,
-  status_code: AtomicU16,
+  status_code: Arc<std::sync::Mutex<AtomicU16>>,
 }
 
 impl Default for TachyonResponse {
@@ -22,24 +22,28 @@ impl TachyonResponse {
   pub fn new() -> Self {
     Self {
       data: Arc::new(std::sync::Mutex::new(None)),
-      status_code: AtomicU16::new(200),
+      status_code: Arc::new(std::sync::Mutex::new(AtomicU16::new(200))),
     }
   }
 
   #[napi]
-  pub fn send(&self, msg: String) -> String {
+  pub fn send(&self, msg: Option<String>) -> Option<String> {
     if let Ok(mut data) = self.data.lock() {
-      *data = Some(msg.clone());
+      *data = msg.clone();
     }
     msg
   }
 
   #[napi]
   pub fn status(&self, code: u16) -> TachyonResponse {
-    self.status_code.store(code, Ordering::Relaxed);
-    TachyonResponse {
+    self
+      .status_code
+      .lock()
+      .unwrap()
+      .store(code, Ordering::Relaxed);
+    Self {
       data: Arc::clone(&self.data),
-      status_code: AtomicU16::new(code),
+      status_code: Arc::clone(&self.status_code),
     }
   }
 
@@ -69,7 +73,11 @@ impl TachyonResponse {
   }
 
   pub fn get_status(&self) -> u16 {
-    self.status_code.load(Ordering::Relaxed)
+    if let Ok(status_code) = self.status_code.lock() {
+      status_code.load(Ordering::Relaxed)
+    } else {
+      500
+    }
   }
 
   pub fn inner_ptr(&self) -> *const () {
@@ -81,7 +89,7 @@ impl Clone for TachyonResponse {
   fn clone(&self) -> Self {
     Self {
       data: Arc::clone(&self.data),
-      status_code: AtomicU16::new(self.status_code.load(Ordering::Relaxed)),
+      status_code: Arc::clone(&self.status_code),
     }
   }
 }

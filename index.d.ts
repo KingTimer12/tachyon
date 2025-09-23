@@ -67,7 +67,7 @@ export declare class TachyonRequest {
 
 export declare class TachyonResponse {
   constructor()
-  send(msg: string): string
+  send(msg?: string | undefined | null): string | null
   status(code: number): TachyonResponse
   json(data: any): string
 }
