@@ -10,7 +10,7 @@ test('list routes', (t) => {
 
 test('create route', (t) => {
   const server = tachyon()
-  server.get('/test', (req, res) => {
+  server.get('/test', async (_req, res) => {
     res.send('Hello World!')
   })
   t.deepEqual(server.routes(), ['/test GET'])
@@ -18,7 +18,7 @@ test('create route', (t) => {
 
 test('create POST route', (t) => {
   const server = tachyon()
-  server.post('/users', (req, res) => {
+  server.post('/users', (_req, res) => {
     res.send('User created!')
   })
   t.deepEqual(server.routes(), ['/users POST'])
@@ -26,7 +26,7 @@ test('create POST route', (t) => {
 
 test('create PUT route', (t) => {
   const server = tachyon()
-  server.put('/users/1', (req, res) => {
+  server.put('/users/1', (_req, res) => {
     res.send('User updated!')
   })
   t.deepEqual(server.routes(), ['/users/1 PUT'])
@@ -34,7 +34,7 @@ test('create PUT route', (t) => {
 
 test('create DELETE route', (t) => {
   const server = tachyon()
-  server.delete('/users/1', (req, res) => {
+  server.delete('/users/1', (_req, res) => {
     res.send('User deleted!')
   })
   t.deepEqual(server.routes(), ['/users/1 DELETE'])
@@ -42,7 +42,7 @@ test('create DELETE route', (t) => {
 
 test('create PATCH route', (t) => {
   const server = tachyon()
-  server.patch('/users/1', (req, res) => {
+  server.patch('/users/1', (_req, res) => {
     res.send('User patched!')
   })
   t.deepEqual(server.routes(), ['/users/1 PATCH'])
@@ -50,13 +50,13 @@ test('create PATCH route', (t) => {
 
 test('create multiple routes', (t) => {
   const server = tachyon()
-  server.get('/', (req, res) => {
+  server.get('/', async (_req, res) => {
     res.send('Home')
   })
-  server.post('/users', (req, res) => {
+  server.post('/users', (_req, res) => {
     res.send('Create user')
   })
-  server.put('/users/1', (req, res) => {
+  server.put('/users/1', (_req, res) => {
     res.send('Update user')
   })
   const routes = server.routes()

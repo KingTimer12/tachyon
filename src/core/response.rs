@@ -28,8 +28,9 @@ impl TachyonResponse {
 
   #[napi]
   pub fn send(&self, msg: Option<Value>) -> Option<Value> {
+    let json_string = serde_json::to_string(&msg).unwrap_or_else(|_| "{}".to_string());
     if let Ok(mut data) = self.data.lock() {
-      *data = msg.clone().map(|f| f.to_string());
+      *data = Some(json_string.clone());
     }
     msg
   }
@@ -45,15 +46,6 @@ impl TachyonResponse {
       data: Arc::clone(&self.data),
       status_code: Arc::clone(&self.status_code),
     }
-  }
-
-  #[napi]
-  pub fn json(&self, data: Value) -> String {
-    let json_string = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
-    if let Ok(mut data_guard) = self.data.lock() {
-      *data_guard = Some(json_string.clone());
-    }
-    json_string
   }
 
   pub fn take_data(&self) -> Option<String> {

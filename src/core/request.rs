@@ -18,9 +18,3 @@ impl Default for TachyonRequest {
     Self::new(Value::Null)
   }
 }
-
-impl TachyonRequest {
-  pub fn method(&self) -> &str {
-    "GET"
-  }
-}

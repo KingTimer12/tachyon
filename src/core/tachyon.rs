@@ -1,4 +1,5 @@
 use bytes::{Buf, Bytes};
+use dashmap::DashMap;
 use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::{header, server::conn::http1, service::service_fn, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
@@ -8,9 +9,8 @@ use napi::{
 };
 use napi_derive::napi;
 use std::{
-  collections::HashMap,
   net::{IpAddr, Ipv4Addr, SocketAddr},
-  sync::{Arc, RwLock},
+  sync::Arc,
 };
 use tokio::{net::TcpListener, task};
 
@@ -29,13 +29,13 @@ static NOTFOUND: &[u8] = b"Not Found";
 
 #[napi]
 pub struct Tachyon {
-  routes: Arc<RwLock<HashMap<String, TachyonRouter>>>,
+  routes: Arc<DashMap<String, TachyonRouter>>,
 }
 
 impl Default for Tachyon {
   fn default() -> Self {
     Self {
-      routes: Arc::new(RwLock::new(HashMap::new())),
+      routes: Arc::new(DashMap::new()),
     }
   }
 }
@@ -44,9 +44,7 @@ impl Default for Tachyon {
 impl Tachyon {
   #[napi(constructor)]
   pub fn new() -> Self {
-    Self {
-      routes: Arc::new(RwLock::new(HashMap::new())),
-    }
+    Self::default()
   }
 
   /// Add a GET route handler with Express-like syntax
@@ -58,7 +56,8 @@ impl Tachyon {
   /// })
   /// ```
   #[napi(
-    ts_args_type = "route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void"
+    ts_args_type = r#"route: string, callback: ((req: TachyonRequest, res: TachyonResponse) => void) | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>)"#,
+    js_name = "get"
   )]
   pub fn get(
     &self,
@@ -146,22 +145,19 @@ impl Tachyon {
 
   #[napi]
   pub fn routes(&self) -> Vec<String> {
-    if let Ok(routes) = self.routes.read() {
-      routes
-        .iter()
-        .map(|(key, router)| {
-          if let Some(colon_pos) = key.find(':') {
-            let method = &key[..colon_pos];
-            let path = &key[colon_pos + 1..];
-            format!("{} {}", path, Method::from(method))
-          } else {
-            format!("{} {}", key, Method::new(router.method()))
-          }
-        })
-        .collect()
-    } else {
-      Vec::new()
+    let mut result = Vec::new();
+    for r in self.routes.iter() {
+      let key = r.key().clone();
+      let router = r.value();
+      if let Some(colon_pos) = key.find(':') {
+        let method = &key[..colon_pos];
+        let path = &key[colon_pos + 1..];
+        result.push(format!("{} {}", path, Method::from(method)));
+      } else {
+        result.push(format!("{} {}", key, Method::new(router.method())));
+      }
     }
+    result
   }
 
   #[napi]
@@ -192,12 +188,12 @@ impl Tachyon {
     }
   }
 
-  pub fn get_routes(&self) -> Arc<RwLock<HashMap<String, TachyonRouter>>> {
+  pub fn get_routes(&self) -> Arc<DashMap<String, TachyonRouter>> {
     Arc::clone(&self.routes)
   }
 
   async fn echo(
-    routes: Arc<RwLock<HashMap<String, TachyonRouter>>>,
+    routes: Arc<DashMap<String, TachyonRouter>>,
     req: Request<hyper::body::Incoming>,
   ) -> std::result::Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     let path = req.uri().path();
@@ -215,26 +211,21 @@ impl Tachyon {
 
     // Fast read lock for route lookup - optimized for nanosecond performance
     let (found_route, matched_key) = {
-      if let Ok(routes_guard) = routes.read() {
-        // First try exact match
-        if routes_guard.contains_key(&route_key) {
-          (true, route_key.clone())
-        } else {
-          // Try parameter matching
-          let mut matched = false;
-          let mut match_key = String::new();
-
-          for (key, _) in routes_guard.iter() {
-            if utils::route_matches(key, &route_key) {
-              matched = true;
-              match_key = key.clone();
-              break;
-            }
-          }
-          (matched, match_key)
-        }
+      if routes.contains_key(&route_key) {
+        (true, route_key.clone())
       } else {
-        (false, String::new())
+        // Try parameter matching
+        let mut matched = false;
+        let mut match_key = String::new();
+
+        for key in routes.iter().map(|f| f.key().clone()) {
+          if utils::route_matches(&key, &route_key) {
+            matched = true;
+            match_key = key.clone();
+            break;
+          }
+        }
+        (matched, match_key)
       }
     };
 
@@ -264,14 +255,17 @@ impl Tachyon {
       let request = TachyonRequest::new(data);
 
       // Get handler and call it
-      if let Ok(routes_guard) = routes.read() {
-        if let Some(route) = routes_guard.get(&matched_key) {
-          let handler = route.handler();
-          handler.call(request, response.clone());
+      let maybe_handler = {
+        if let Some(route_ref) = routes.get(&matched_key) {
+          Some(route_ref.handler())
+        } else {
+          None
         }
-      }
+      };
 
-      tokio::time::sleep(tokio::time::Duration::from_micros(0)).await; // To prevent error in send response
+      if let Some(handler) = maybe_handler {
+        handler.call(request, response.clone()).await;
+      }
 
       let status_code = match StatusCode::from_u16(response.get_status()) {
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
