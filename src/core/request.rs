@@ -1,20 +1,21 @@
 use napi_derive::napi;
+use serde_json::Value;
 
-#[napi]
-#[derive(Debug, Clone, Copy)]
-pub struct TachyonRequest;
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct TachyonRequest {
+  pub body: Value,
+}
 
-#[napi]
 impl TachyonRequest {
-  #[napi(constructor)]
-  pub fn new() -> Self {
-    Self
+  pub fn new(body: Value) -> Self {
+    Self { body }
   }
 }
 
 impl Default for TachyonRequest {
   fn default() -> Self {
-    Self::new()
+    Self::new(Value::Null)
   }
 }
 

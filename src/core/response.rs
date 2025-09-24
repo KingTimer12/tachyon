@@ -27,9 +27,9 @@ impl TachyonResponse {
   }
 
   #[napi]
-  pub fn send(&self, msg: Option<String>) -> Option<String> {
+  pub fn send(&self, msg: Option<Value>) -> Option<Value> {
     if let Ok(mut data) = self.data.lock() {
-      *data = msg.clone();
+      *data = msg.clone().map(|f| f.to_string());
     }
     msg
   }

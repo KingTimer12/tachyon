@@ -1,30 +1,30 @@
 pub enum Method {
-  Get(u8),
-  Post(u8),
-  Put(u8),
-  Delete(u8),
-  Patch(u8),
+  Get,
+  Post,
+  Put,
+  Delete,
+  Patch,
 }
 
 impl Method {
   pub fn new(id: u8) -> Self {
     match id {
-      0 => Method::Get(id),
-      1 => Method::Post(id),
-      2 => Method::Put(id),
-      3 => Method::Delete(id),
-      4 => Method::Patch(id),
+      0 => Method::Get,
+      1 => Method::Post,
+      2 => Method::Put,
+      3 => Method::Delete,
+      4 => Method::Patch,
       _ => panic!("Invalid method ID"),
     }
   }
 
   pub fn id(&self) -> u8 {
     match self {
-      Method::Get(id) => *id,
-      Method::Post(id) => *id,
-      Method::Put(id) => *id,
-      Method::Delete(id) => *id,
-      Method::Patch(id) => *id,
+      Method::Get => 0,
+      Method::Post => 1,
+      Method::Put => 2,
+      Method::Delete => 3,
+      Method::Patch => 4,
     }
   }
 }
@@ -35,14 +35,27 @@ impl PartialEq for Method {
   }
 }
 
+impl From<&str> for Method {
+  fn from(method: &str) -> Self {
+    match method {
+      "0" => Method::Get,
+      "1" => Method::Post,
+      "2" => Method::Put,
+      "3" => Method::Delete,
+      "4" => Method::Patch,
+      _ => panic!("Invalid method"),
+    }
+  }
+}
+
 impl From<&hyper::Method> for Method {
   fn from(method: &hyper::Method) -> Self {
     match *method {
-      hyper::Method::GET => Method::Get(0),
-      hyper::Method::POST => Method::Post(1),
-      hyper::Method::PUT => Method::Put(2),
-      hyper::Method::DELETE => Method::Delete(3),
-      hyper::Method::PATCH => Method::Patch(4),
+      hyper::Method::GET => Method::Get,
+      hyper::Method::POST => Method::Post,
+      hyper::Method::PUT => Method::Put,
+      hyper::Method::DELETE => Method::Delete,
+      hyper::Method::PATCH => Method::Patch,
       _ => panic!("Invalid method"),
     }
   }
@@ -51,12 +64,24 @@ impl From<&hyper::Method> for Method {
 impl From<hyper::Method> for Method {
   fn from(method: hyper::Method) -> Self {
     match method {
-      hyper::Method::GET => Method::Get(0),
-      hyper::Method::POST => Method::Post(1),
-      hyper::Method::PUT => Method::Put(2),
-      hyper::Method::DELETE => Method::Delete(3),
-      hyper::Method::PATCH => Method::Patch(4),
+      hyper::Method::GET => Method::Get,
+      hyper::Method::POST => Method::Post,
+      hyper::Method::PUT => Method::Put,
+      hyper::Method::DELETE => Method::Delete,
+      hyper::Method::PATCH => Method::Patch,
       _ => panic!("Invalid method"),
     }
+  }
+}
+impl std::fmt::Display for Method {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let s = match self {
+      Method::Get => "GET",
+      Method::Post => "POST",
+      Method::Put => "PUT",
+      Method::Delete => "DELETE",
+      Method::Patch => "PATCH",
+    };
+    write!(f, "{}", s)
   }
 }

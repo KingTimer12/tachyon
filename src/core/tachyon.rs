@@ -1,6 +1,6 @@
-use bytes::Bytes;
-use http_body_util::combinators::BoxBody;
-use hyper::{server::conn::http1, service::service_fn, Request, Response, StatusCode};
+use bytes::{Buf, Bytes};
+use http_body_util::{combinators::BoxBody, BodyExt};
+use hyper::{header, server::conn::http1, service::service_fn, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use napi::{
   bindgen_prelude::{FnArgs, Function},
@@ -24,7 +24,7 @@ use crate::{
   utils::{self, empty, full},
 };
 
-// static INTERNAL_SERVER_ERROR: &[u8] = b"Internal Server Error";
+static INTERNAL_SERVER_ERROR: &[u8] = b"Internal Server Error";
 static NOTFOUND: &[u8] = b"Not Found";
 
 #[napi]
@@ -153,9 +153,9 @@ impl Tachyon {
           if let Some(colon_pos) = key.find(':') {
             let method = &key[..colon_pos];
             let path = &key[colon_pos + 1..];
-            format!("{} {}", path, method)
+            format!("{} {}", path, Method::from(method))
           } else {
-            format!("{} {}", key, router.method())
+            format!("{} {}", key, Method::new(router.method()))
           }
         })
         .collect()
@@ -202,6 +202,12 @@ impl Tachyon {
   ) -> std::result::Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     let path = req.uri().path();
     let method = Method::from(req.method());
+    let is_json = req
+      .headers()
+      .get("content-type")
+      .and_then(|ct| ct.to_str().ok())
+      .map(|ct| ct.to_ascii_lowercase().starts_with("application/json"))
+      .unwrap_or(false);
     let response_builder = Response::builder();
 
     // Ultra-fast dynamic route lookup with parameter matching
@@ -234,8 +240,28 @@ impl Tachyon {
 
     if found_route {
       // Pre-allocated response and request objects
+      let whole_body = req.collect().await?.aggregate();
+      let mut data = serde_json::Value::Null;
+
+      if is_json {
+        data = match serde_json::from_reader(whole_body.reader()) {
+          Ok(json) => json,
+          Err(_) => serde_json::Value::Null,
+        };
+      }
+      if data.is_null()
+        && is_json
+        && (method == Method::Post || method == Method::Put || method == Method::Patch)
+      {
+        return Ok(
+          response_builder
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(full(INTERNAL_SERVER_ERROR))
+            .unwrap(),
+        );
+      }
       let response = TachyonResponse::new();
-      let request = TachyonRequest::new();
+      let request = TachyonRequest::new(data);
 
       // Get handler and call it
       if let Ok(routes_guard) = routes.read() {
@@ -251,12 +277,17 @@ impl Tachyon {
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
         Ok(status_code) => status_code,
       };
+      let mut response_builder = response_builder.status(status_code);
       let response_data = match response.take_data() {
-        Some(data) => full(data),
+        Some(data) => {
+          if data.trim_start().starts_with('{') || data.trim_start().starts_with('[') {
+            response_builder = response_builder.header(header::CONTENT_TYPE, "application/json");
+          }
+          full(data)
+        }
         None => empty(),
       };
-
-      let response_builder = response_builder.status(status_code).body(response_data);
+      let response_builder = response_builder.body(response_data);
       Ok(response_builder.unwrap())
     } else {
       Ok(

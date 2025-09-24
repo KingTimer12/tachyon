@@ -61,15 +61,15 @@ export declare class Tachyon {
   listen(port: number): Promise<void>
 }
 
-export declare class TachyonRequest {
-  constructor()
-}
-
 export declare class TachyonResponse {
   constructor()
-  send(msg?: string | undefined | null): string | null
+  send(msg?: any | undefined | null): any | null
   status(code: number): TachyonResponse
   json(data: any): string
 }
 
 export declare function tachyon(): Tachyon
+
+export interface TachyonRequest {
+  body: any
+}

@@ -37,8 +37,7 @@ app.get('/', (req, res) => {
 })
 
 // Start the server
-app.listen(3000)
-console.log('Server running on http://localhost:3000')
+app.listen(3000) // Listening on http://127.0.0.1:3000
 ```
 
 ## API Reference
@@ -87,12 +86,20 @@ import { tachyon } from 'tachyon'
 
 const app = tachyon()
 
-app.get('/', (req, res) => {
-  // Return "Hello, World!"
+app.get('/', (_req, res) => {
+  res.send('Hello world!')
 })
 
-app.get('/api/health', (req, res) => {
-  // Health check endpoint
+app.post('/post', (req, res) => {
+  const body = req.body
+  res.send(body)
+})
+app.get('/empty', (_req, res) => {
+  res.status(204).send()
+})
+
+app.get('/api/health', (_req, res) => {
+  res.send({ status: 'OK' })
 })
 
 app.listen(3000)
