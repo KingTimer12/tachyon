@@ -12,7 +12,12 @@ export declare class Tachyon {
    * })
    * ```
    */
-  get(route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void): void
+  get(
+    route: string,
+    callback:
+      | ((req: TachyonRequest, res: TachyonResponse) => void)
+      | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>),
+  ): void
   /**
    * Add a POST route handler with Express-like syntax
    *

@@ -58,7 +58,8 @@ impl Tachyon {
   /// })
   /// ```
   #[napi(
-    ts_args_type = "route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void"
+    ts_args_type = r#"route: string, callback: ((req: TachyonRequest, res: TachyonResponse) => void) | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>)"#,
+    js_name = "get"
   )]
   pub fn get(
     &self,
