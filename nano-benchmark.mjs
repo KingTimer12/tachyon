@@ -13,15 +13,15 @@ app.get('/fast', (req, res) => {
 })
 
 app.post('/users', (req, res) => {
-  res.json({ id: 1, name: 'User', created: Date.now() })
+  res.send({ id: 1, name: 'User', created: Date.now() })
 })
 
 app.get('/json', (req, res) => {
-  res.json({ message: 'Hello', timestamp: Date.now() })
+  res.send({ message: 'Hello', timestamp: Date.now() })
 })
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() })
+  res.send({ status: 'ok', uptime: process.uptime() })
 })
 
 console.log('🚀 Tachyon Nano-Benchmark - Dynamic Routes Only')

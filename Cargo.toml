@@ -1,9 +1,8 @@
-
 [package]
 authors = ["AaronKing <aaron.cmfor@gmail.com>"]
 edition = "2021"
 name    = "tachyon-rs"
-version = "0.0.5"
+version = "0.0.6"
 
 [lib]
 crate-type = ["cdylib"]
@@ -18,7 +17,7 @@ hyper-util     = { version = "0.1", features = ["full"] }
 napi           = { version = "3", features = ["async", "serde-json", "napi4"] }
 napi-derive    = "3.0.0"
 once_cell      = "1.21.3"
-serde          = "1.0.225"
+serde          = { version = "1.0.225", features = ["derive"] }
 serde_json     = "1.0.145"
 tokio          = { version = "1", features = ["full"] }
 
@@ -26,5 +25,12 @@ tokio          = { version = "1", features = ["full"] }
 napi-build = "2"
 
 [profile.release]
-lto   = true
-strip = "symbols"
+codegen-units   = 1         # Single codegen unit for better optimization
+lto             = "fat"     # Full LTO for maximum speed
+opt-level       = 3         # Maximum optimization
+overflow-checks = false     # Disable overflow checks for speed
+panic           = "abort"   # Smaller and faster panic handler
+strip           = "symbols" # Strip symbols to reduce binary size
+
+  [profile.release.package."*"]
+  opt-level = 3 # Optimize all dependencies too

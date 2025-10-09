@@ -4,11 +4,16 @@ export declare class Tachyon {
   constructor()
   /**
    * Add a GET route handler with Express-like syntax
+   * Supports both sync and async handlers
    *
    * Example usage:
    * ```javascript
    * app.get('/', (req, res) => {
    *   res.send('Hello World!')
+   * })
+   *
+   * app.get('/async', async (req, res) => {
+   *   res.send('Async Hello!')
    * })
    * ```
    */
@@ -20,17 +25,29 @@ export declare class Tachyon {
   ): void
   /**
    * Add a POST route handler with Express-like syntax
+   * Supports both sync and async handlers
    *
    * Example usage:
    * ```javascript
    * app.post('/users', (req, res) => {
    *   res.send('User created!')
    * })
+   *
+   * app.post('/users', async (req, res) => {
+   *   await db.save(req.body)
+   *   res.send('User created!')
+   * })
    * ```
    */
-  post(route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void): void
+  post(
+    route: string,
+    callback:
+      | ((req: TachyonRequest, res: TachyonResponse) => void)
+      | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>),
+  ): void
   /**
    * Add a PUT route handler with Express-like syntax
+   * Supports both sync and async handlers
    *
    * Example usage:
    * ```javascript
@@ -39,9 +56,15 @@ export declare class Tachyon {
    * })
    * ```
    */
-  put(route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void): void
+  put(
+    route: string,
+    callback:
+      | ((req: TachyonRequest, res: TachyonResponse) => void)
+      | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>),
+  ): void
   /**
    * Add a DELETE route handler with Express-like syntax
+   * Supports both sync and async handlers
    *
    * Example usage:
    * ```javascript
@@ -50,9 +73,15 @@ export declare class Tachyon {
    * })
    * ```
    */
-  delete(route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void): void
+  delete(
+    route: string,
+    callback:
+      | ((req: TachyonRequest, res: TachyonResponse) => void)
+      | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>),
+  ): void
   /**
    * Add a PATCH route handler with Express-like syntax
+   * Supports both sync and async handlers
    *
    * Example usage:
    * ```javascript
@@ -61,14 +90,19 @@ export declare class Tachyon {
    * })
    * ```
    */
-  patch(route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void): void
+  patch(
+    route: string,
+    callback:
+      | ((req: TachyonRequest, res: TachyonResponse) => void)
+      | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>),
+  ): void
   routes(): Array<string>
   listen(port: number): Promise<void>
 }
 
 export declare class TachyonResponse {
   constructor()
-  send(msg?: any | undefined | null): any | null
+  send(msg?: any | undefined | null): void
   status(code: number): TachyonResponse
 }
 

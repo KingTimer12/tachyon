@@ -11,7 +11,7 @@ app.get('/', (req, res) => {
 
 // JSON response route
 app.get('/json', (req, res) => {
-  res.json({ message: 'Hello JSON', timestamp: Date.now() })
+  res.send({ message: 'Hello JSON', timestamp: Date.now() })
 })
 
 // Start Tachyon server

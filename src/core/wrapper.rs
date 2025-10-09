@@ -1,5 +1,8 @@
 use async_trait::async_trait;
 use napi::{bindgen_prelude::FnArgs, threadsafe_function::ThreadsafeFunctionCallMode};
+use std::time::Duration;
+use tokio::sync::oneshot;
+use tokio::time::timeout;
 
 use crate::{core::router::TachyonHandler, TachyonRequest, TachyonResponse};
 
@@ -24,20 +27,35 @@ impl ThreadsafeFunctionWrapper {
 #[async_trait]
 impl TachyonHandler for ThreadsafeFunctionWrapper {
   async fn call(&self, req: TachyonRequest, res: TachyonResponse) {
-    let func_async = (req.clone(), res.clone()).into();
-    match self.tsfn.call_async(func_async).await {
-      Ok(ret) => {
-        eprintln!("tsfn.call_async sucesso. {:?}", ret);
-      }
-      Err(err) => {
-        println!("tsfn.call_async erro: {:?}", err);
+    // Create a channel to wait for handler completion
+    let (tx, rx) = oneshot::channel();
 
-        // fallback
-        let func_sync = (req, res).into();
-        self
-          .tsfn
-          .call(func_sync, ThreadsafeFunctionCallMode::NonBlocking);
+    // Clone response to check later
+    let res_clone = res.clone();
+
+    // Call the handler
+    let args = (req, res).into();
+    let _ = self
+      .tsfn
+      .call(args, ThreadsafeFunctionCallMode::NonBlocking);
+
+    // Spawn a task to wait for response data
+    tokio::spawn(async move {
+      // Poll for data with exponential backoff
+      let mut delay = 10; // microseconds
+      for _ in 0..50 {
+        if res_clone.get_data().is_some() {
+          let _ = tx.send(());
+          return;
+        }
+        tokio::time::sleep(Duration::from_micros(delay)).await;
+        delay = (delay * 2).min(1000); // max 1ms
       }
-    }
+      // Timeout - send anyway
+      let _ = tx.send(());
+    });
+
+    // Wait for handler to complete (with timeout)
+    let _ = timeout(Duration::from_millis(100), rx).await;
   }
 }

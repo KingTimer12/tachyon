@@ -1,54 +1,130 @@
 use bytes::Bytes;
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 
+#[inline(always)]
 pub fn full<T: Into<Bytes>>(chunk: T) -> BoxBody<Bytes, hyper::Error> {
   Full::new(chunk.into())
     .map_err(|never| match never {})
     .boxed()
 }
 
+#[inline(always)]
 pub fn empty() -> BoxBody<Bytes, hyper::Error> {
   Empty::<Bytes>::new()
     .map_err(|never| match never {})
     .boxed()
 }
 
+/// Ultra-fast route matching with zero allocations
+/// Optimized for nanosecond-level performance
+#[inline]
 pub fn route_matches(route_pattern: &str, actual_route: &str) -> bool {
-  let pattern_colon = route_pattern.find(':');
-  let actual_colon = actual_route.find(':');
-
-  if pattern_colon.is_none() || actual_colon.is_none() {
+  // Fast path: if lengths are very different, can't match
+  if route_pattern.len().abs_diff(actual_route.len()) > 50 {
     return false;
   }
 
-  let pattern_method = &route_pattern[..pattern_colon.unwrap()];
-  let actual_method = &actual_route[..actual_colon.unwrap()];
+  // Find method separator ':'
+  let Some(pattern_colon) = route_pattern.as_bytes().iter().position(|&b| b == b':') else {
+    return false;
+  };
+
+  let Some(actual_colon) = actual_route.as_bytes().iter().position(|&b| b == b':') else {
+    return false;
+  };
+
+  // Fast method comparison (usually just 1-6 bytes: GET, POST, PUT, DELETE, PATCH)
+  if pattern_colon != actual_colon {
+    return false;
+  }
+
+  // SAFETY: We know the position is valid and contains ':'
+  let pattern_method = unsafe { route_pattern.get_unchecked(..pattern_colon) };
+  let actual_method = unsafe { actual_route.get_unchecked(..actual_colon) };
 
   if pattern_method != actual_method {
     return false;
   }
 
-  let pattern_path = &route_pattern[pattern_colon.unwrap() + 1..];
-  let actual_path = &actual_route[actual_colon.unwrap() + 1..];
+  // Get paths after method
+  let pattern_path = unsafe { route_pattern.get_unchecked(pattern_colon + 1..) };
+  let actual_path = unsafe { actual_route.get_unchecked(actual_colon + 1..) };
 
-  let pattern_segments: Vec<&str> = pattern_path.split('/').collect();
-  let actual_segments: Vec<&str> = actual_path.split('/').collect();
+  // Fast path: exact match (no parameters)
+  if pattern_path == actual_path {
+    return true;
+  }
 
-  if pattern_segments.len() != actual_segments.len() {
+  // Only do parameter matching if pattern contains ':'
+  if !pattern_path.contains(':') {
     return false;
   }
 
-  // Match each segment
-  for (pattern_seg, actual_seg) in pattern_segments.iter().zip(actual_segments.iter()) {
-    if pattern_seg.starts_with(':') {
-      if actual_seg.is_empty() {
-        return false;
+  // Zero-allocation segment matching using iterators
+  let mut pattern_segments = pattern_path.split('/');
+  let mut actual_segments = actual_path.split('/');
+
+  loop {
+    match (pattern_segments.next(), actual_segments.next()) {
+      (Some(pattern_seg), Some(actual_seg)) => {
+        // Parameter segment (starts with ':')
+        if pattern_seg.starts_with(':') {
+          // Parameters can't be empty
+          if actual_seg.is_empty() {
+            return false;
+          }
+          continue;
+        }
+
+        // Exact match required
+        if pattern_seg != actual_seg {
+          return false;
+        }
       }
-      continue;
-    } else if pattern_seg != actual_seg {
-      return false;
+      (None, None) => return true, // Both exhausted = match
+      _ => return false,           // Length mismatch
     }
   }
+}
 
-  true
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_exact_match() {
+    assert!(route_matches("0:/users", "0:/users"));
+    assert!(route_matches("1:/api/posts", "1:/api/posts"));
+  }
+
+  #[test]
+  fn test_parameter_match() {
+    assert!(route_matches("0:/users/:id", "0:/users/123"));
+    assert!(route_matches(
+      "0:/users/:id/posts/:postId",
+      "0:/users/123/posts/456"
+    ));
+  }
+
+  #[test]
+  fn test_method_mismatch() {
+    assert!(!route_matches("0:/users", "1:/users"));
+  }
+
+  #[test]
+  fn test_path_mismatch() {
+    assert!(!route_matches("0:/users", "0:/posts"));
+    assert!(!route_matches("0:/users/:id", "0:/posts/123"));
+  }
+
+  #[test]
+  fn test_length_mismatch() {
+    assert!(!route_matches("0:/users/:id", "0:/users/123/extra"));
+    assert!(!route_matches("0:/users/:id/posts", "0:/users/123"));
+  }
+
+  #[test]
+  fn test_empty_parameter() {
+    assert!(!route_matches("0:/users/:id", "0:/users/"));
+  }
 }

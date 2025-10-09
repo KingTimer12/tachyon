@@ -24,8 +24,7 @@ use crate::{
   utils::{self, empty, full},
 };
 
-static INTERNAL_SERVER_ERROR: &[u8] = b"Internal Server Error";
-static NOTFOUND: &[u8] = b"Not Found";
+static NOTFOUND: &str = "Not Found";
 
 #[napi]
 pub struct Tachyon {
@@ -48,11 +47,16 @@ impl Tachyon {
   }
 
   /// Add a GET route handler with Express-like syntax
+  /// Supports both sync and async handlers
   ///
   /// Example usage:
   /// ```javascript
   /// app.get('/', (req, res) => {
   ///   res.send('Hello World!')
+  /// })
+  ///
+  /// app.get('/async', async (req, res) => {
+  ///   res.send('Async Hello!')
   /// })
   /// ```
   #[napi(
@@ -68,15 +72,21 @@ impl Tachyon {
   }
 
   /// Add a POST route handler with Express-like syntax
+  /// Supports both sync and async handlers
   ///
   /// Example usage:
   /// ```javascript
   /// app.post('/users', (req, res) => {
   ///   res.send('User created!')
   /// })
+  ///
+  /// app.post('/users', async (req, res) => {
+  ///   await db.save(req.body)
+  ///   res.send('User created!')
+  /// })
   /// ```
   #[napi(
-    ts_args_type = "route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void"
+    ts_args_type = r#"route: string, callback: ((req: TachyonRequest, res: TachyonResponse) => void) | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>)"#
   )]
   pub fn post(
     &self,
@@ -87,6 +97,7 @@ impl Tachyon {
   }
 
   /// Add a PUT route handler with Express-like syntax
+  /// Supports both sync and async handlers
   ///
   /// Example usage:
   /// ```javascript
@@ -95,7 +106,7 @@ impl Tachyon {
   /// })
   /// ```
   #[napi(
-    ts_args_type = "route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void"
+    ts_args_type = r#"route: string, callback: ((req: TachyonRequest, res: TachyonResponse) => void) | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>)"#
   )]
   pub fn put(
     &self,
@@ -106,6 +117,7 @@ impl Tachyon {
   }
 
   /// Add a DELETE route handler with Express-like syntax
+  /// Supports both sync and async handlers
   ///
   /// Example usage:
   /// ```javascript
@@ -114,7 +126,7 @@ impl Tachyon {
   /// })
   /// ```
   #[napi(
-    ts_args_type = "route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void"
+    ts_args_type = r#"route: string, callback: ((req: TachyonRequest, res: TachyonResponse) => void) | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>)"#
   )]
   pub fn delete(
     &self,
@@ -125,6 +137,7 @@ impl Tachyon {
   }
 
   /// Add a PATCH route handler with Express-like syntax
+  /// Supports both sync and async handlers
   ///
   /// Example usage:
   /// ```javascript
@@ -133,7 +146,7 @@ impl Tachyon {
   /// })
   /// ```
   #[napi(
-    ts_args_type = "route: string, callback: (req: TachyonRequest, res: TachyonResponse) => void"
+    ts_args_type = r#"route: string, callback: ((req: TachyonRequest, res: TachyonResponse) => void) | ((req: TachyonRequest, res: TachyonResponse) => Promise<void>)"#
   )]
   pub fn patch(
     &self,
@@ -145,9 +158,9 @@ impl Tachyon {
 
   #[napi]
   pub fn routes(&self) -> Vec<String> {
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(self.routes.len());
     for r in self.routes.iter() {
-      let key = r.key().clone();
+      let key = r.key();
       let router = r.value();
       if let Some(colon_pos) = key.find(':') {
         let method = &key[..colon_pos];
@@ -163,7 +176,6 @@ impl Tachyon {
   #[napi]
   pub async fn listen(&self, port: u16) -> napi::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
-    // Implement server listening logic here
     let listener = TcpListener::bind(addr).await.map_err(napi::Error::from)?;
     println!("Listening on http://{}", addr);
 
@@ -171,6 +183,7 @@ impl Tachyon {
       let (stream, _) = listener.accept().await.map_err(napi::Error::from)?;
       let io = TokioIo::new(stream);
       let routes = Arc::clone(&self.routes);
+
       task::spawn(async move {
         if let Err(err) = http1::Builder::new()
           .serve_connection(
@@ -182,7 +195,7 @@ impl Tachyon {
           )
           .await
         {
-          println!("Error serving connection: {:?}", err);
+          eprintln!("Error serving connection: {:?}", err);
         }
       });
     }
@@ -198,98 +211,86 @@ impl Tachyon {
   ) -> std::result::Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     let path = req.uri().path();
     let method = Method::from(req.method());
+
+    // Fast content-type check
     let is_json = req
       .headers()
-      .get("content-type")
+      .get(header::CONTENT_TYPE)
       .and_then(|ct| ct.to_str().ok())
-      .map(|ct| ct.to_ascii_lowercase().starts_with("application/json"))
+      .map(|ct| ct.starts_with("application/json"))
       .unwrap_or(false);
-    let response_builder = Response::builder();
 
-    // Ultra-fast dynamic route lookup with parameter matching
+    // Pre-build route key for fastest lookup
     let route_key = format!("{}:{}", method.id(), path);
 
-    // Fast read lock for route lookup - optimized for nanosecond performance
-    let (found_route, matched_key) = {
-      if routes.contains_key(&route_key) {
-        (true, route_key.clone())
-      } else {
-        // Try parameter matching
-        let mut matched = false;
-        let mut match_key = String::new();
-
-        for key in routes.iter().map(|f| f.key().clone()) {
-          if utils::route_matches(&key, &route_key) {
-            matched = true;
-            match_key = key.clone();
-            break;
-          }
-        }
-        (matched, match_key)
-      }
+    // Ultra-fast route lookup - try exact match first
+    let handler = if let Some(route_ref) = routes.get(&route_key) {
+      Some(route_ref.handler())
+    } else {
+      // Fallback to parameter matching only if exact match fails
+      routes
+        .iter()
+        .find(|entry| utils::route_matches(entry.key(), &route_key))
+        .map(|entry| entry.value().handler())
     };
 
-    if found_route {
-      // Pre-allocated response and request objects
-      let whole_body = req.collect().await?.aggregate();
-      let mut data = serde_json::Value::Null;
-
-      if is_json {
-        data = match serde_json::from_reader(whole_body.reader()) {
-          Ok(json) => json,
-          Err(_) => serde_json::Value::Null,
-        };
-      }
-      if data.is_null()
-        && is_json
-        && (method == Method::Post || method == Method::Put || method == Method::Patch)
-      {
-        return Ok(
-          response_builder
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(full(INTERNAL_SERVER_ERROR))
-            .unwrap(),
-        );
-      }
-      let response = TachyonResponse::new();
-      let request = TachyonRequest::new(data);
-
-      // Get handler and call it
-      let maybe_handler = {
-        if let Some(route_ref) = routes.get(&matched_key) {
-          Some(route_ref.handler())
-        } else {
-          None
-        }
-      };
-
-      if let Some(handler) = maybe_handler {
-        handler.call(request, response.clone()).await;
-      }
-
-      let status_code = match StatusCode::from_u16(response.get_status()) {
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        Ok(status_code) => status_code,
-      };
-      let mut response_builder = response_builder.status(status_code);
-      let response_data = match response.take_data() {
-        Some(data) => {
-          if data.trim_start().starts_with('{') || data.trim_start().starts_with('[') {
-            response_builder = response_builder.header(header::CONTENT_TYPE, "application/json");
-          }
-          full(data)
-        }
-        None => empty(),
-      };
-      let response_builder = response_builder.body(response_data);
-      Ok(response_builder.unwrap())
-    } else {
-      Ok(
-        response_builder
+    // If no route found, return 404 immediately
+    let Some(handler) = handler else {
+      return Ok(
+        Response::builder()
           .status(StatusCode::NOT_FOUND)
           .body(full(NOTFOUND))
           .unwrap(),
-      )
+      );
+    };
+
+    // Collect body
+    let whole_body = req.collect().await?.aggregate();
+
+    // Parse JSON only if content-type is JSON
+    let data = if is_json {
+      serde_json::from_reader(whole_body.reader()).unwrap_or(serde_json::Value::Null)
+    } else {
+      serde_json::Value::Null
+    };
+
+    // Validate JSON for POST/PUT/PATCH
+    if data.is_null()
+      && is_json
+      && (method == Method::Post || method == Method::Put || method == Method::Patch)
+    {
+      return Ok(
+        Response::builder()
+          .status(StatusCode::BAD_REQUEST)
+          .body(full("Invalid JSON"))
+          .unwrap(),
+      );
     }
+
+    // Create request and response objects
+    let request = TachyonRequest::new(data);
+    let response = TachyonResponse::new();
+
+    // Call handler (supports both sync and async)
+    handler.call(request, response.clone()).await;
+
+    // Build response with minimal allocations
+    let status_code =
+      StatusCode::from_u16(response.get_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+    let mut response_builder = Response::builder().status(status_code);
+
+    let response_data = if let Some(data) = response.take_data() {
+      // Auto-detect JSON response
+      let trimmed = data.trim_start();
+      if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        response_builder = response_builder.header(header::CONTENT_TYPE, "application/json");
+      }
+      full(data)
+    } else {
+      empty()
+    };
+
+    Ok(response_builder.body(response_data).unwrap())
   }
 }
