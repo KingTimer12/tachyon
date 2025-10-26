@@ -45,32 +45,23 @@ impl TachyonHandler for ThreadsafeFunctionWrapper {
       // call the JS handler (blocks until the callback is scheduled/executed)
       let call_res = tsfn.call(args, ThreadsafeFunctionCallMode::Blocking);
 
-      // polling loop on the clone reserved for polling
-      let mut delay_micros = 10u64; // mais agressivo
-      let max_delay_micros = 2_000u64; // até 2ms
+      let mut delay_micros = 10u64;
+      let max_delay_micros = 2_000u64;
       loop {
-        // leitura rápida
         if res_for_poll.get_data().is_some() {
           break;
         }
         if start.elapsed() >= global_timeout {
           break;
         }
-
-        // sleep bloqueante (estamos dentro de spawn_blocking)
+        
         if delay_micros <= 200 {
-          // tiny sleeps — ajudará quando resposta for muito rápida
           std::thread::sleep(Duration::from_micros(delay_micros));
         } else {
-          // para delays maiores, use millis (mais eficiente)
-          std::thread::sleep(Duration::from_millis((delay_micros / 1000) as u64));
+          std::thread::sleep(Duration::from_millis(delay_micros / 1000));
         }
-
-        // exponencial até cap
         delay_micros = (delay_micros.saturating_mul(2)).min(max_delay_micros);
       }
-
-      // return the call result for diagnostics
       call_res
     });
 

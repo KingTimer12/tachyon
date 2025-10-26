@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use bytes::Bytes;
 use dashmap::DashMap;
@@ -20,27 +20,17 @@ pub fn empty() -> BoxBody<Bytes, hyper::Error> {
     .boxed()
 }
 
-// função pequena de warmup que chama cada handler uma vez
 pub fn warmup_routes(routes: &Arc<DashMap<String, TachyonRouter>>) {
-  // Cria um request/response mínimo (vazio)
   let req = TachyonRequest::new(serde_json::Value::Null);
   let res = TachyonResponse::new();
-
-  // itera rotas e dispara chamadas blocking em spawn_blocking para inicializar V8/TSFN
+  
   for entry in routes.iter() {
     let handler = entry.value().handler();
-    // se o handler for o wrapper que contém tsfn, chamamos de forma blocking
-    // aqui assumimos que handler.call() é async; chamamos via spawn_blocking com timeout
     let req_clone = req.clone();
     let res_clone = res.clone();
 
-    // spawn_blocking para não bloquear o runtime async
-    let h = tokio::task::spawn_blocking(move || {
-      // Dependendo da sua implementação, handler.call pode ser um método sync ou async em objeto;
-      // aqui usamos tsfn.call(Blocking) diretamente se você tiver acesso ao TSFN wrapper.
-      // Se não, apenas vamos invocar handler.call synchronously as you do in normal flow.
-      // Exemplo genérico (pseudocódigo):
-      let _ = handler.call(req_clone, res_clone);
+    tokio::task::spawn_blocking(move || {
+      tokio::runtime::Handle::current().block_on(handler.call(req_clone, res_clone));
     });
   }
 }
