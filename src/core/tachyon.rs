@@ -1,4 +1,4 @@
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use dashmap::DashMap;
 use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::{header, server::conn::http1, service::service_fn, Request, Response, StatusCode};
@@ -21,7 +21,7 @@ use crate::{
     response::TachyonResponse,
     router::{HTTPCall, TachyonRouter},
   },
-  utils::{self, empty, full},
+  utils::{self, empty, full, warmup_routes},
 };
 
 static NOTFOUND: &str = "Not Found";
@@ -179,6 +179,8 @@ impl Tachyon {
     let listener = TcpListener::bind(addr).await.map_err(napi::Error::from)?;
     println!("Listening on http://{}", addr);
 
+    warmup_routes(&self.routes);
+
     loop {
       let (stream, _) = listener.accept().await.map_err(napi::Error::from)?;
       let io = TokioIo::new(stream);
@@ -245,11 +247,11 @@ impl Tachyon {
     };
 
     // Collect body
-    let whole_body = req.collect().await?.aggregate();
+    let whole_body = req.collect().await?.to_bytes();
 
     // Parse JSON only if content-type is JSON
     let data = if is_json {
-      serde_json::from_reader(whole_body.reader()).unwrap_or(serde_json::Value::Null)
+      serde_json::from_slice(&whole_body).unwrap_or(serde_json::Value::Null)
     } else {
       serde_json::Value::Null
     };

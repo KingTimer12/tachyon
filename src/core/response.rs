@@ -47,7 +47,7 @@ impl TachyonResponse {
 
   #[napi]
   pub fn status(&self, code: u16) -> TachyonResponse {
-    self.status_code.store(code, Ordering::Release);
+    self.status_code.store(code, Ordering::SeqCst);
     Self {
       data: Arc::clone(&self.data),
       status_code: Arc::clone(&self.status_code),
@@ -56,7 +56,7 @@ impl TachyonResponse {
 
   pub fn take_data(&self) -> Option<String> {
     // Atomically take the data pointer
-    let ptr = self.data.swap(std::ptr::null_mut(), Ordering::Acquire);
+    let ptr = self.data.swap(std::ptr::null_mut(), Ordering::SeqCst);
 
     if ptr.is_null() {
       None
@@ -70,7 +70,7 @@ impl TachyonResponse {
 
   pub fn get_data(&self) -> Option<String> {
     // Read without taking ownership
-    let ptr = self.data.load(Ordering::Acquire);
+    let ptr = self.data.load(Ordering::SeqCst);
 
     if ptr.is_null() {
       None
@@ -83,7 +83,7 @@ impl TachyonResponse {
   }
 
   pub fn get_status(&self) -> u16 {
-    self.status_code.load(Ordering::Acquire)
+    self.status_code.load(Ordering::SeqCst)
   }
 
   pub fn inner_ptr(&self) -> *const () {

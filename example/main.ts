@@ -22,7 +22,6 @@ app.post('/sync-post', (req, res) => {
 // POST async
 app.post('/async-post', async (req, res) => {
   // Simula processamento assíncrono
-  await new Promise((resolve) => setTimeout(resolve, 5))
   res.send({ received: req.body, type: 'async', processed: true })
 })
 
